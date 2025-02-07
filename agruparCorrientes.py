@@ -21,9 +21,6 @@ class rama:
 		self.id = id
 		self.punto = pts
 		self.subramas = self.buscaSubramas()
-	
-
-
 	def buscaSubramas(self):
 		setUsados(self.id)
 		tmp = [idx for idx in  list(rtreeIdx.intersection(self.punto.bounds))  if idx not in usadas]
@@ -38,6 +35,23 @@ class rama:
 				ramTmp.append(rama(ir,new_punto))
 			return ramTmp
 		return None
+
+
+
+def build_arboles(puntos):
+    arboles = []
+    usadas = set()
+    stack = []
+    for i, row in puntos.iterrows():
+        stack.append(Rama(i, row.geometry, usadas))
+    while stack:
+        rama_node = stack.pop()
+        arboles.append(rama_node)
+        if rama_node.subramas:
+            stack.extend(rama_node.subramas)
+    return arboles
+
+
 
 def setUsados(id):
 	usadas.append(id)
