@@ -14,10 +14,15 @@ class corrientes(object):
 
 	def importar(self,ruta):
 		tmp = geo.read_file(ruta,columns=["geometry"])
+		tmp["id"] = tmp.index+1
+		tmp["start"]=tmp.geometry.apply(lambda x: Point(*x.coords[0]))
+		tmp["end"]=tmp.geometry.apply(lambda x: Point(*x.coords[-1]))
+		tmp["grupo"]=-1
+		tmp["orden"]=-1
+		tmp["flip"]=-1
+		tmp.set_index("id",inplace=True)
 		self.CRS = tmp.crs.to_string()
-		for i,l in tmp.iterrows():
-			lin=dict(id=i+1,geometry=l.geometry,start=Point(*l.geometry.coords[0]),end=Point(*l.geometry.coords[-1]),grupo=-1,orden=-1,flip=-1)
-			self.lineas.append(lin)
+		self.lineas = tmp.to_dict("index")
 		self.rtreeIdx = self.indiceLineas(tmp)
 		
 	def indiceLineas(self,gdf):
@@ -29,6 +34,7 @@ class corrientes(object):
 
 	def aguasArriba(self,id,gpo):
 		sub = list(self.rtreeIdx.intersection(self.lineas[id]["start"].bounds))
+		print(sub)
 		ramas,res = [self.lineas[i]["id"] for i in sub if self.lineas[i]["id"] != id],[]
 		if len(ramas)==0:
 			return self.lineas[id]["id"]
@@ -42,6 +48,12 @@ class corrientes(object):
 				self.lineas[s]["flip"] = 0
 			res.append(self.aguasArriba(s,gpo))
 		return res
+	
+
+
+
+
+
 class puntoInicial(object):
 	def __init__(self,**a):
 		self.puntos=[]
@@ -51,31 +63,33 @@ class puntoInicial(object):
 
 	def importar(self,ruta,h):
 		tmp = geo.read_file(ruta,columns=["geometry"])
-		self.CRS = tmp.crs.to_string()
-		for i,p in tmp.iterrows():
-			pun=dict(id=i+1,geometry=p.geometry,linea=list(h.rtreeIdx.intersection(p.geometry.bounds))[0])
-			if pun["geometry"].distance(h.lineas[pun["linea"]]["end"]) > 0:
-				h.lineas[pun["linea"]]["gemeotry"]=LineString(h.lineas[pun["linea"]]["geometry"].coords[::-1])
-				h.lineas[pun["linea"]]["flip"]=1
-			else:
-				h.lineas[pun["linea"]]["flip"]=3
-			h.lineas[pun["linea"]]["grupo"]=pun["id"]
-			h.lineas[pun["linea"]]["orden"]=1
-			self.puntos.append(pun)
+		tmp["id"] = tmp.index+1
+		tmp.set_index("id",inplace=True)
+		tmp["linea"]=[list(h.rtreeIdx.intersection(p.bounds)) for p in tmp.geometry]
+		self.puntos=tmp.to_dict("index")
+		self.CRS =  tmp.crs.to_string()
+		
+		# for pos in tmp.index:
+		# 	if tmp.loc[pos:"geometry"].distance(h.lineas[pos]["end"]) > 0:
+		# 		h.lineas[pos]["geometry"]=LineString(h.lineas[pos]["geometry"].coords[::-1])
+		# 		h.lineas[pos]["flip"]=1
+		# 	else:
+		# 		h.lineas[pos]["flip"]=3
+		# 	h.lineas[pos]["grupo"]=pos
+		# 	h.lineas[pos]["orden"]=1
+		# 	self.puntos.append(tmp)
 
 
-hidro = corrientes(tipo="LINESTRING",ruta="datos/corrientesAgua.shp")
-puntos = puntoInicial(tipo="POINT",ruta="datos/puntos_dren.shp",hidro=hidro)
-arboles=[h["id"]  for h in hidro.lineas]
-arch = open("datos/arboles.txt","w")	
-arch.write(str(arboles))
-arch.close()
+hidro = corrientes(tipo="LINESTRING",ruta="datos/new_hidro.shp")
+puntos = puntoInicial(tipo="POINT",ruta="datos/new_renaje.shp",hidro=hidro)
+arboles=[]
 
-for p in puntos.puntos:
-	arboles.extend(hidro.aguasArriba(p["linea"],p["id"]))
+for i,a in puntos.puntos.values():
+	print(i,a)
+	arboles.extend(hidro.aguasArriba(a["linea"],i))
 
 print(len(arboles))
 
-misLineas = hidro.lineas[:150]
-misPuntos = puntos.puntos[:150]
+misLineas = hidro.lineas
+misPuntos = puntos.puntos
 
